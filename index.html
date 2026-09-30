@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>EC Wegscheid Turnierauswertung – Version 2.4.2 GitHub</title>
+  <title>EC Wegscheid Turnierauswertung – Version 2.4.3 GitHub</title>
   <link rel="icon" type="image/png" href="favicon.png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
@@ -598,7 +598,7 @@
   <button id="globalStartMenuBtn" class="btn-startmenu-fixed" onclick="goBackToStartMenu()" style="display:none;">↩️ Zurück zum Startmenü</button>
 
   <header>
-    <div class="version-badge">Version 2.4.2 GitHub</div>
+    <div class="version-badge">Version 2.4.3 GitHub</div>
     <h1 id="headerTitle">EC Wegscheid Turnierauswertung</h1>
     <button id="adminCornerBtn" class="btn-admin-corner" onclick="checkAdminAccess()" style="display:none;">⚙️ Admin</button>
     <div class="auth-box">
@@ -2548,45 +2548,48 @@ switchAdminTab('new');
     window.backupAndUploadJahresmeisterschaft = backupAndUploadJahresmeisterschaft;
     window.backupAndUploadStockdart = backupAndUploadStockdart;
 
-    function getRequestedSection(){
+    function getWhiteboardTarget(){
+      const params=new URLSearchParams(location.search);
+      const q=(params.get('seite')||'').trim().toLowerCase();
       const h=(location.hash||'').replace(/^#/,'').trim().toLowerCase();
-      const aliases={
-        cup:'homeCupBtn',
-        cupauswertung:'homeCupBtn',
-        stockdart:'homeStockdartBtn',
-        stockdartauswertung:'homeStockdartBtn',
-        jahresmeisterschaft:'homeJmBtn',
-        zielschiessen:'homeJmBtn',
-        zielschießen:'homeJmBtn',
-        auslosung:'homeDrawBtn',
-        turnierauslosung:'homeDrawBtn'
-      };
-      return aliases[h]||'';
+      return q || h;
     }
 
-    function openRequestedSection(){
-      const buttonId=getRequestedSection();
-      if(!buttonId || !window.currentFirebaseUser || (window.currentRole||'guest')==='guest') return false;
+    function openWhiteboardTarget(){
+      const target=getWhiteboardTarget();
+      if(!target || !window.currentFirebaseUser || (window.currentRole||'guest')==='guest') return false;
 
-      const btn=document.getElementById(buttonId);
-      if(!btn) return false;
+      const r=String(window.currentRole||'guest').trim().toLowerCase();
 
-      // Exakt denselben Weg ausführen wie ein manueller Klick auf der Startseite.
-      setTimeout(()=>{
-        try{
-          btn.click();
-        }catch(e){
-          console.error('Deep-Link konnte den Startseiten-Button nicht ausführen:',e);
-        }
-      },50);
-      return true;
+      if(target==='cup' || target==='cupauswertung'){
+        openCup();
+        return true;
+      }
+
+      if(target==='jahresmeisterschaft' || target==='zielschiessen' || target==='zielschießen'){
+        openJahresmeisterschaft();
+        return true;
+      }
+
+      if(target==='auslosung' || target==='turnierauslosung'){
+        openAuslosung();
+        return true;
+      }
+
+      if(target==='stockdart' || target==='stockdartauswertung'){
+        // StockDart bleibt laut Rechteverteilung nur für ADMIN freigegeben.
+        openStockdart();
+        return true;
+      }
+
+      return false;
     }
 
+    window.openWhiteboardTarget=openWhiteboardTarget;
     window.addEventListener('hashchange',()=>{
-      window._lastDeepLinkTarget='';
-      openRequestedSection();
+      window._ecwOpenedTarget='';
+      if(window.currentFirebaseUser && (window.currentRole||'guest')!=='guest') openWhiteboardTarget();
     });
-
     async function doLogout(){
       try{ await window.firebaseLogout(); showHome(); }catch(e){console.error(e);}
     }
@@ -2680,14 +2683,7 @@ const map={
         homeCupBtn:['admin','whiteboard','turnierauswertung'],
         homeStockdartBtn:['admin'],
         homeJmBtn:['admin','whiteboard','turnierauswertung']
-            if(u && r!=='guest'){
-        const target=getRequestedSection();
-        if(target && window._lastDeepLinkTarget!==target){
-          window._lastDeepLinkTarget=target;
-          setTimeout(()=>openRequestedSection(),80);
-        }
-      }
-    };
+      };
       Object.entries(map).forEach(([id,roles])=>{
         const el=document.getElementById(id); if(!el)return;
         el.classList.toggle('role-denied', !u || !roles.includes(r));
@@ -2720,6 +2716,15 @@ const map={
       }
 
       applyIframeRole(document.getElementById('jahresmeisterschaftFrame'),'jahresmeisterschaft');
+
+      // Deep-Link erst NACH erfolgreicher Firebase- und Rollenprüfung öffnen.
+      if(u && r!=='guest'){
+        const target=getWhiteboardTarget();
+        if(target && window._ecwOpenedTarget!==target){
+          window._ecwOpenedTarget=target;
+          setTimeout(()=>openWhiteboardTarget(),120);
+        }
+      }
     };
 
     /* ===== Navigation 1. Ebene: Turnierauswertung ===== */
@@ -2734,12 +2739,7 @@ const map={
       if (t) t.textContent = title;
       if (a) { const r=window.currentRole||'guest'; a.style.display = (admin && (r==='admin'||r==='turnierauswertung')) ? '' : 'none'; }
     }
-    function showHome() {
-      const af = document.getElementById('auslosungFrame');
-      if (af) af.classList.remove('full');
-      showView('view-home');
-      if(location.hash) history.replaceState(null,'',location.pathname + location.search);
-    }
+    function showHome() { const af = document.getElementById('auslosungFrame'); if (af) af.classList.remove('full'); showView('view-home'); }
     function openCup() { if(!requireRole(['admin','whiteboard','turnierauswertung'],'Cupauswertung')) return; goToMainMenu(); }
     function openStockdart() {
       if(!requireRole(['admin'],'Stockdartauswertung')) return;
