@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>EC Wegscheid Turnierauswertung – Version 2.4.6 GitHub</title>
+  <title>EC Wegscheid Turnierauswertung – Version 2.4.7 GitHub</title>
   <link rel="icon" type="image/png" href="favicon.png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
@@ -2450,6 +2450,7 @@ switchAdminTab('new');
     }
     function showSwitchUser(){
       window.ECW_ADMIN_OVERRIDE=true;
+      resetJahresmeisterschaftForRole();
       const ov=document.getElementById('loginOverlay');
       const cancel=document.getElementById('loginCancelBtn');
       const err=document.getElementById('loginError');
@@ -2462,6 +2463,7 @@ switchAdminTab('new');
     }
     function cancelSwitchUser(){
       window.ECW_ADMIN_OVERRIDE=false;
+      resetJahresmeisterschaftForRole();
       const cancel=document.getElementById('loginCancelBtn');
       if(cancel) cancel.style.display='none';
       const ov=document.getElementById('loginOverlay');
@@ -2499,8 +2501,14 @@ switchAdminTab('new');
           passEl.value='';
           const ov=document.getElementById('loginOverlay');if(ov)ov.style.display='none';
           const cancel=document.getElementById('loginCancelBtn');if(cancel)cancel.style.display='none';
+
+          // Ein zuvor als Whiteboard geladenes JM-iframe enthält inline ausgeblendete
+          // Adminfunktionen. Deshalb bei Rollenwechsel vollständig neu aufbauen.
+          resetJahresmeisterschaftForRole();
+
           window.applyFirebaseRole?.();
-          if((new URLSearchParams(location.search).get('seite')||'').toLowerCase()==='jahresmeisterschaft'){
+          const target=(new URLSearchParams(location.search).get('seite')||'').toLowerCase();
+          if(target==='jahresmeisterschaft'||target==='zielschiessen'||target==='zielschießen'){
             openJahresmeisterschaft();
           }else{
             showHome();
@@ -2654,6 +2662,7 @@ switchAdminTab('new');
     async function doLogout(){
       try{
         window.ECW_ADMIN_OVERRIDE=false;
+        resetJahresmeisterschaftForRole();
         await window.firebaseLogout();
         showHome();
         setTimeout(()=>window.openWhiteboardTarget?.(),50);
@@ -2811,6 +2820,16 @@ const map={
       if (f && !f.dataset.loaded) { f.srcdoc = STOCKDART_HTML; f.dataset.loaded = '1'; }
       showView('view-stockdart');
     }
+    function resetJahresmeisterschaftForRole(){
+      const f=document.getElementById('jahresmeisterschaftFrame');
+      if(!f)return;
+      try{
+        f.removeAttribute('src');
+        f.srcdoc='';
+        delete f.dataset.loaded;
+      }catch(e){}
+    }
+
     function openJahresmeisterschaft() {
       if(!requireRole(['admin','whiteboard','turnierauswertung'],'Jahresmeisterschaft')) return;
       const f = document.getElementById('jahresmeisterschaftFrame');
