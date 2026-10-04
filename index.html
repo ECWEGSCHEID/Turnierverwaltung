@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>EC Wegscheid Turnierauswertung – Version 2.4.5 GitHub</title>
+  <title>EC Wegscheid Turnierauswertung – Version 2.4.6 GitHub</title>
   <link rel="icon" type="image/png" href="favicon.png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
@@ -511,11 +511,14 @@
 
 
     const ECW_FORCED_WHITEBOARD = (new URLSearchParams(location.search)).get('whiteboard') === '1';
+    window.ECW_ADMIN_OVERRIDE = false;
     window.getEffectiveRole = function(){
-      if (ECW_FORCED_WHITEBOARD) return 'whiteboard';
+      if (ECW_FORCED_WHITEBOARD && !window.ECW_ADMIN_OVERRIDE) return 'whiteboard';
       return String(window.currentRole || 'guest').trim().toLowerCase();
     };
-    window.isForcedWhiteboardView = function(){ return ECW_FORCED_WHITEBOARD; };
+    window.isForcedWhiteboardView = function(){
+      return ECW_FORCED_WHITEBOARD && !window.ECW_ADMIN_OVERRIDE;
+    };
 
     window.firebaseSaveJahresmeisterschaft = async function(data) {
       const r = window.getEffectiveRole ? window.getEffectiveRole() : (window.currentRole || "guest");
@@ -2446,6 +2449,7 @@ switchAdminTab('new');
       setTimeout(()=>document.getElementById('loginEmail')?.focus(),50);
     }
     function showSwitchUser(){
+      window.ECW_ADMIN_OVERRIDE=true;
       const ov=document.getElementById('loginOverlay');
       const cancel=document.getElementById('loginCancelBtn');
       const err=document.getElementById('loginError');
@@ -2457,23 +2461,69 @@ switchAdminTab('new');
       setTimeout(()=>document.getElementById('loginEmail')?.focus(),50);
     }
     function cancelSwitchUser(){
+      window.ECW_ADMIN_OVERRIDE=false;
       const cancel=document.getElementById('loginCancelBtn');
       if(cancel) cancel.style.display='none';
       const ov=document.getElementById('loginOverlay');
       if(window.currentFirebaseUser && ov) ov.style.display='none';
+      try{window.applyFirebaseRole?.();}catch(e){}
+      try{window.openWhiteboardTarget?.();}catch(e){}
     }
 
     async function doLogin(){
-      const e=document.getElementById('loginEmail').value.trim();
-      const p=document.getElementById('loginPassword').value;
+      const emailEl=document.getElementById('loginEmail');
+      const passEl=document.getElementById('loginPassword');
       const err=document.getElementById('loginError');
-      err.textContent='';
+      const e=emailEl.value.trim();
+      const p=passEl.value;
+      if(!e||!p){err.textContent='Bitte E-Mail-Adresse und Passwort eingeben.';return;}
+      err.textContent='Anmeldung wird geprüft …';
       try{
-        await window.firebaseLogin(e,p);
-        document.getElementById('loginPassword').value='';
-        // Loginfenster wird erst nach erfolgreicher Rollenprüfung geschlossen.
-      }catch(x){ err.textContent='Anmeldung fehlgeschlagen. E-Mail/Passwort prüfen.'; console.error(x); }
+        const cred=await window.firebaseLogin(e,p);
+        const user=cred?.user||window.firebaseAuth?.currentUser||null;
+        if(user && window.db && window.fbGet && window.fbRef){
+          const snap=await window.fbGet(window.fbRef(window.db,'users/'+user.uid));
+          const prof=snap.val();
+          window.currentFirebaseUser=user;
+          if(prof && prof.active===true){
+            window.currentUserProfile=prof;
+            window.currentRole=String(prof.role||'user').trim().toLowerCase();
+          }else{
+            window.currentUserProfile=null;
+            window.currentRole='guest';
+          }
+        }
+        const r=window.getEffectiveRole?window.getEffectiveRole():(window.currentRole||'guest');
+        if(r==='admin'||r==='turnierauswertung'){
+          err.textContent='';
+          passEl.value='';
+          const ov=document.getElementById('loginOverlay');if(ov)ov.style.display='none';
+          const cancel=document.getElementById('loginCancelBtn');if(cancel)cancel.style.display='none';
+          window.applyFirebaseRole?.();
+          if((new URLSearchParams(location.search).get('seite')||'').toLowerCase()==='jahresmeisterschaft'){
+            openJahresmeisterschaft();
+          }else{
+            showHome();
+          }
+          return;
+        }
+        if(r==='guest'){
+          err.textContent='Benutzer ist nicht für die Turnierauswertung freigegeben.';
+        }else{
+          err.textContent='Dieses Benutzerkonto besitzt keine Admin-Berechtigung.';
+        }
+      }catch(x){
+        err.textContent='Anmeldung fehlgeschlagen. E-Mail/Passwort prüfen.';
+        console.error(x);
+      }
     }
+    document.getElementById('loginPassword')?.addEventListener('keydown',e=>{
+      if(e.key==='Enter'){e.preventDefault();doLogin();}
+    });
+    document.getElementById('loginEmail')?.addEventListener('keydown',e=>{
+      if(e.key==='Enter'){e.preventDefault();document.getElementById('loginPassword')?.focus();}
+    });
+
     async function backupAndUploadStockdart(){
       if((window.currentRole||'guest')!=='admin'){alert('Nur ADMIN darf StockDart sichern.');return;}
       const f=document.getElementById('stockdartFrame');
@@ -2602,7 +2652,12 @@ switchAdminTab('new');
       if(window.isForcedWhiteboardView?.() || (window.currentFirebaseUser && er!=='guest')) openWhiteboardTarget();
     });
     async function doLogout(){
-      try{ await window.firebaseLogout(); showHome(); }catch(e){console.error(e);}
+      try{
+        window.ECW_ADMIN_OVERRIDE=false;
+        await window.firebaseLogout();
+        showHome();
+        setTimeout(()=>window.openWhiteboardTarget?.(),50);
+      }catch(e){console.error(e);}
     }
     function requireRole(allowed, label){
       const r=window.getEffectiveRole ? window.getEffectiveRole() : (window.currentRole||'guest');
